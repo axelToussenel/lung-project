@@ -158,6 +158,9 @@ app.layout = html.Div(
                 )
             ]
         ),
+        html.Div([
+            html.H1("Analyse des performances du modèle", style={'textAlign': 'center'}),
+        ]),
         html.Div(
             style=styles['dashboard-layout'],
             children=[
@@ -165,7 +168,7 @@ app.layout = html.Div(
                 dcc.Graph(id='performance-comparison-table', figure=fig_performance_comparison, style=styles['dashboard-table']),
                 dcc.Graph(id='confusion-matrix', figure=fig_confusion_matrix, style=styles['dashboard-chart']),
                 dcc.Graph(id='performance-graph', figure=fig_performance, style=styles['dashboard-chart']),
-                html.H3("Analyse des performances du modèle"),
+                html.H2("Matrice de confusion :", style={'textAlign': 'center', 'margin': 'auto', 'alignItems': 'center'}),
                 html.Pre(classification_rep, style={'whiteSpace': 'pre-wrap', 'wordBreak': 'break-all'}),
             ]
         )
