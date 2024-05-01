@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 import datetime
-import json
+import random
 import matplotlib.pyplot as plt
 from sklearn.metrics import confusion_matrix, classification_report
 
@@ -16,13 +16,14 @@ from sklearn.metrics import confusion_matrix, classification_report
 app = dash.Dash(__name__)
 
 #entrainement de l'ensemble de données
-@app.callback(Output('features-table', 'fig_features'),
-              Output('performance-comparison-table', 'fig_performance_comparison'),
-              Output('confusion-matrix', 'fig_confusion_matrix'),
-              Output('performance-graph', 'fig_performance'),
-              Output('confusion-matrix-text', 'classification_rep'),
+@app.callback(Output('features-table', 'figure'),
+              Output('performance-comparison-table', 'figure'),
+              Output('confusion-matrix', 'figure'),
+              Output('performance-graph', 'figure'),
+              Output('confusion-matrix-text', 'children'),
     Input('train-button', 'n_clicks'))
 def init_dashboard(n_clicks):
+    print("entree dans init_dashboard")
     if n_clicks is None:
         raise dash.exceptions.PreventUpdate
     else:
@@ -44,9 +45,9 @@ def init_dashboard(n_clicks):
         # Création de la visualisation des performances par classe
         data_performance = {
             'Classe': ['PNEUMONIA', 'NORMAL'],
-            'Précision': [0.85, 0.92],  # Exemple de précision
-            'Rappel': [0.78, 0.95],  # Exemple de rappel
-            'F-mesure': [0.81, 0.93]  # Exemple de F-mesure
+            'Précision': [round(random.uniform(0, 1), 2), round(random.uniform(0, 1), 2)],  # Exemple de précision
+            'Rappel': [round(random.uniform(0, 1), 2), round(random.uniform(0, 1), 2)],  # Exemple de rappel
+            'F-mesure': [round(random.uniform(0, 1), 2), round(random.uniform(0, 1), 2)]  # Exemple de F-mesure
         }
         df_performance = pd.DataFrame(data_performance)
         fig_performance = go.Figure(data=[
@@ -195,19 +196,19 @@ app.layout = html.Div(
         html.Div(
             style=styles['dashboard-layout'],
             children=[
-                dcc.Graph(id='features-table', figure=init_dashboard(1)[0], style=styles['dashboard-table']),
-                dcc.Graph(id='performance-comparison-table', figure=init_dashboard(1)[1], style=styles['dashboard-table']),
-                dcc.Graph(id='confusion-matrix', figure=init_dashboard(1)[2], style=styles['dashboard-chart']),
-                dcc.Graph(id='performance-graph', figure=init_dashboard(1)[3], style=styles['dashboard-chart']),
+                dcc.Graph(id='features-table', style=styles['dashboard-table']),
+                dcc.Graph(id='performance-comparison-table', style=styles['dashboard-table']),
+                dcc.Graph(id='confusion-matrix', style=styles['dashboard-chart']),
+                dcc.Graph(id='performance-graph', style=styles['dashboard-chart']),
             ]
         ),
         html.Div(
             children=[
                 html.H2("Matrice de confusion :", style={'textAlign': 'center', 'margin': 'auto', 'alignItems': 'center'}),
-                html.Pre(init_dashboard(1)[4], style={'whiteSpace': 'pre-wrap', 'wordBreak': 'break-all'}),
+                html.Pre(id='confusion-matrix-text', style={'whiteSpace': 'pre-wrap', 'wordBreak': 'break-all'}),
         ]),
         html.Div([
-            html.H2("Tester des radios pulmonaires", style={'textAlign': 'center', 'margin-top': '80px'}),
+            html.H2("Tester des radios pulmonaires", style={'textAlign': 'center', 'marginTop': '80px'}),
             dcc.Upload(
                 id='upload-image',
                 children=html.Div([
