@@ -16,68 +16,75 @@ from sklearn.metrics import confusion_matrix, classification_report
 app = dash.Dash(__name__)
 
 #entrainement de l'ensemble de données
-@app.callback(Output('output-train-button', 'children'),
+@app.callback(Output('features-table', 'fig_features'),
+              Output('performance-comparison-table', 'fig_performance_comparison'),
+              Output('confusion-matrix', 'fig_confusion_matrix'),
+              Output('performance-graph', 'fig_performance'),
+              Output('confusion-matrix-text', 'classification_rep'),
     Input('train-button', 'n_clicks'))
 def init_dashboard(n_clicks):
-    # Exemple de données fictives pour les graphiques
-    true_labels = np.random.randint(0, 2, size=100)  # Étiquettes de test générées aléatoirement
-    predictions = np.random.randint(0, 2, size=100)  # Prédictions de test générées aléatoirement
+    if n_clicks is None:
+        raise dash.exceptions.PreventUpdate
+    else:
+        # Exemple de données fictives pour les graphiques
+        true_labels = np.random.randint(0, 2, size=100)  # Étiquettes de test générées aléatoirement
+        predictions = np.random.randint(0, 2, size=100)  # Prédictions de test générées aléatoirement
 
-    # Calcul de la matrice de confusion
-    cm = confusion_matrix(true_labels, predictions)
-    # Calcul des métriques de classification
-    classification_rep = classification_report(true_labels, predictions, target_names=['PNEUMONIA', 'NORMAL'])
-    # Création de la matrice de confusion sous forme de heatmap
-    fig_confusion_matrix = go.Figure(data=go.Heatmap(z=cm, x=['PNEUMONIA', 'NORMAL'], y=['PNEUMONIA', 'NORMAL'],
-                                                    colorscale='Blues'))
-    fig_confusion_matrix.update_layout(title="Matrice de confusion",
-                                    xaxis_title="Prédiction",
-                                    yaxis_title="Vraie valeur")
+        # Calcul de la matrice de confusion
+        cm = confusion_matrix(true_labels, predictions)
+        # Calcul des métriques de classification
+        classification_rep = classification_report(true_labels, predictions, target_names=['PNEUMONIA', 'NORMAL'])
+        # Création de la matrice de confusion sous forme de heatmap
+        fig_confusion_matrix = go.Figure(data=go.Heatmap(z=cm, x=['PNEUMONIA', 'NORMAL'], y=['PNEUMONIA', 'NORMAL'],
+                                                        colorscale='Blues'))
+        fig_confusion_matrix.update_layout(title="Matrice de confusion",
+                                        xaxis_title="Prédiction",
+                                        yaxis_title="Vraie valeur")
 
-    # Création de la visualisation des performances par classe
-    data_performance = {
-        'Classe': ['PNEUMONIA', 'NORMAL'],
-        'Précision': [0.85, 0.92],  # Exemple de précision
-        'Rappel': [0.78, 0.95],  # Exemple de rappel
-        'F-mesure': [0.81, 0.93]  # Exemple de F-mesure
-    }
-    df_performance = pd.DataFrame(data_performance)
-    fig_performance = go.Figure(data=[
-        go.Bar(name='Précision', x=df_performance['Classe'], y=df_performance['Précision']),
-        go.Bar(name='Rappel', x=df_performance['Classe'], y=df_performance['Rappel']),
-        go.Bar(name='F-mesure', x=df_performance['Classe'], y=df_performance['F-mesure'])
-    ])
-    fig_performance.update_layout(barmode='group', title="Analyse des performances par classe")
+        # Création de la visualisation des performances par classe
+        data_performance = {
+            'Classe': ['PNEUMONIA', 'NORMAL'],
+            'Précision': [0.85, 0.92],  # Exemple de précision
+            'Rappel': [0.78, 0.95],  # Exemple de rappel
+            'F-mesure': [0.81, 0.93]  # Exemple de F-mesure
+        }
+        df_performance = pd.DataFrame(data_performance)
+        fig_performance = go.Figure(data=[
+            go.Bar(name='Précision', x=df_performance['Classe'], y=df_performance['Précision']),
+            go.Bar(name='Rappel', x=df_performance['Classe'], y=df_performance['Rappel']),
+            go.Bar(name='F-mesure', x=df_performance['Classe'], y=df_performance['F-mesure'])
+        ])
+        fig_performance.update_layout(barmode='group', title="Analyse des performances par classe")
 
-    # Ajout des données factices pour les graphiques 3 et 4
-    training_performance = {'Précision': 0.85, 'Rappel': 0.78, 'F-mesure': 0.81}
-    test_performance = {'Précision': 0.82, 'Rappel': 0.75, 'F-mesure': 0.78}
+        # Ajout des données factices pour les graphiques 3 et 4
+        training_performance = {'Précision': 0.85, 'Rappel': 0.78, 'F-mesure': 0.81}
+        test_performance = {'Précision': 0.82, 'Rappel': 0.75, 'F-mesure': 0.78}
 
-    # Création du graphique 3 : Visualisation des caractéristiques extraites (tableau)
-    fig_features = go.Figure(data=[go.Table(
-        header=dict(values=['Couche', 'Activation moyenne'],
-                    fill_color='paleturquoise',
-                    align='left'),
-        cells=dict(values=[['Conv1', 'Conv2', 'Conv3', 'Conv4'],  # Noms des couches
-                        [0.75, 0.82, 0.68, 0.79]],  # Activations moyennes
-                fill_color='lavender',
-                align='left'))
-    ])
-    fig_features.update_layout(title="Visualisation des caractéristiques extraites")
+        # Création du graphique 3 : Visualisation des caractéristiques extraites (tableau)
+        fig_features = go.Figure(data=[go.Table(
+            header=dict(values=['Couche', 'Activation moyenne'],
+                        fill_color='paleturquoise',
+                        align='left'),
+            cells=dict(values=[['Conv1', 'Conv2', 'Conv3', 'Conv4'],  # Noms des couches
+                            [0.75, 0.82, 0.68, 0.79]],  # Activations moyennes
+                    fill_color='lavender',
+                    align='left'))
+        ])
+        fig_features.update_layout(title="Visualisation des caractéristiques extraites")
 
-    # Création du graphique 4 : Comparaison des résultats d'entraînement et de test
-    fig_performance_comparison = go.Figure(data=[go.Table(
-        header=dict(values=['Métrique', 'Entraînement', 'Test'],
-                    fill_color='paleturquoise',
-                    align='left'),
-        cells=dict(values=[['Précision', 'Rappel', 'F-mesure'],
-                        [0.85, 0.78, 0.81],  # Performances d'entraînement
-                        [0.82, 0.75, 0.78]],  # Performances de test
-                fill_color='lavender',
-                align='left'))
-    ])
-    fig_performance_comparison.update_layout(title="Comparaison des performances d'entraînement et de test")
-    return fig_features, fig_performance_comparison, fig_confusion_matrix, fig_performance, classification_rep
+        # Création du graphique 4 : Comparaison des résultats d'entraînement et de test
+        fig_performance_comparison = go.Figure(data=[go.Table(
+            header=dict(values=['Métrique', 'Entraînement', 'Test'],
+                        fill_color='paleturquoise',
+                        align='left'),
+            cells=dict(values=[['Précision', 'Rappel', 'F-mesure'],
+                            [0.85, 0.78, 0.81],  # Performances d'entraînement
+                            [0.82, 0.75, 0.78]],  # Performances de test
+                    fill_color='lavender',
+                    align='left'))
+        ])
+        fig_performance_comparison.update_layout(title="Comparaison des performances d'entraînement et de test")
+        return fig_features, fig_performance_comparison, fig_confusion_matrix, fig_performance, classification_rep
 
 
 #entrainement du modèle pour des images sélectionnées
@@ -178,8 +185,8 @@ app.layout = html.Div(
                 html.Button(
                     id='train-button',
                     style=styles['dashboard-button'],
-                    children="Lancer l'entrainement du modèle"),
-                html.Div(id='output-train-button'),
+                    children="Lancer l'entrainement du modèle",
+                    n_clicks=1),
             ]
         ),
         html.Div([
