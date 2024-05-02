@@ -12,7 +12,7 @@ import cv2
 import os
 
 # Importer les fonctions du modèle combiné
-from RNN import get_data, build_combined_model, preprocess_data, create_datagen, build_cnn_model, build_rnn_model, train_model
+from CombinedModel import get_data, build_combined_model, preprocess_data, create_datagen, build_cnn_model, build_rnn_model, train_model
 
 # Initialisation de l'application Dash
 app = dash.Dash(__name__)

@@ -4,12 +4,13 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import keras
 from keras.models import Model, Sequential
-from keras.layers import Input, Conv2D, MaxPool2D, Flatten, Dense, Dropout, BatchNormalization, LSTM, concatenate, Bidirectional
+from keras.layers import Activation, Add, Input, Conv2D, MaxPool2D, Flatten, Dense, Dropout, BatchNormalization, LSTM, concatenate, Bidirectional, SpatialDropout1D, GlobalMaxPooling1D, GlobalAveragePooling1D, GRU
 from keras.callbacks import ReduceLROnPlateau
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from sklearn.metrics import classification_report , confusion_matrix
 import cv2
 import os
+
 
 def get_data(data_dir, labels, img_size):
     data = []
@@ -42,18 +43,14 @@ def load_and_resize_images(df, img_size, channels=1):
     return np.array(x), np.array(y)
 
 
-def preprocess_data(train_df, test_df, val_df, img_size):
+def preprocess_data(data_df, img_size):
     # Charger et redimensionner les images
-    x_train, y_train = load_and_resize_images(train_df, img_size)
-    x_val, y_val = load_and_resize_images(val_df, img_size)
-    x_test, y_test = load_and_resize_images(test_df, img_size)
+    x_data, y_data = load_and_resize_images(data_df, img_size)
 
     # Normaliser les données
-    x_train = x_train / 255.0
-    x_val = x_val / 255.0
-    x_test = x_test / 255.0
+    x_data = x_data / 255.0
 
-    return x_train, y_train, x_val, y_val, x_test, y_test
+    return x_data, y_data
 
 
 def create_datagen(rotation_range=30, zoom_range=0.2, width_shift_range=0.1, height_shift_range=0.1, horizontal_flip=True, vertical_flip=False):
@@ -73,28 +70,49 @@ def create_datagen(rotation_range=30, zoom_range=0.2, width_shift_range=0.1, hei
     return datagen
 
 
-
 def build_cnn_model(input_shape=(150, 150, 1)):
     input_layer_cnn = Input(shape=input_shape)
 
-    x = Conv2D(32, (3, 3), strides=1, padding='same', activation='relu')(input_layer_cnn)
+    # Première couche de convolution avec 64 filtres de taille 3x3
+    x = Conv2D(64, (3, 3), strides=1, padding='same')(input_layer_cnn)
     x = BatchNormalization()(x)
+    x = Activation('relu')(x)
     x = MaxPool2D((2, 2), strides=2, padding='same')(x)
-    x = Conv2D(64, (3, 3), strides=1, padding='same', activation='relu')(x)
-    x = Dropout(0.1)(x)
+
+    # Deuxième couche de convolution avec 128 filtres de taille 3x3
+    x = Conv2D(128, (3, 3), strides=1, padding='same')(x)
     x = BatchNormalization()(x)
+    x = Activation('relu')(x)
     x = MaxPool2D((2, 2), strides=2, padding='same')(x)
-    x = Conv2D(64, (3, 3), strides=1, padding='same', activation='relu')(x)
+
+    # Troisième couche de convolution avec 256 filtres de taille 3x3
+    x = Conv2D(256, (3, 3), strides=1, padding='same')(x)
     x = BatchNormalization()(x)
+    x = Activation('relu')(x)
     x = MaxPool2D((2, 2), strides=2, padding='same')(x)
-    x = Conv2D(128, (3, 3), strides=1, padding='same', activation='relu')(x)
-    x = Dropout(0.2)(x)
+
+    # Quatrième couche de convolution avec 512 filtres de taille 3x3
+    x = Conv2D(512, (3, 3), strides=1, padding='same')(x)
     x = BatchNormalization()(x)
+    x = Activation('relu')(x)
     x = MaxPool2D((2, 2), strides=2, padding='same')(x)
-    x = Conv2D(256, (3, 3), strides=1, padding='same', activation='relu')(x)
-    x = Dropout(0.2)(x)
+
+    # Cinquième couche de convolution avec 512 filtres de taille 3x3
+    x = Conv2D(512, (3, 3), strides=1, padding='same')(x)
     x = BatchNormalization()(x)
+    x = Activation('relu')(x)
     x = MaxPool2D((2, 2), strides=2, padding='same')(x)
+
+    # Ajout d'un bloc résiduel avec deux couches de convolution de 512 filtres
+    shortcut = x
+    x = Conv2D(512, (3, 3), strides=1, padding='same')(x)
+    x = BatchNormalization()(x)
+    x = Activation('relu')(x)
+    x = Conv2D(512, (3, 3), strides=1, padding='same')(x)
+    x = BatchNormalization()(x)
+    x = Add()([shortcut, x])
+    x = Activation('relu')(x)
+
     x = Flatten()(x)
 
     cnn_model = Model(inputs=input_layer_cnn, outputs=x)
@@ -103,11 +121,22 @@ def build_cnn_model(input_shape=(150, 150, 1)):
 def build_rnn_model(input_shape):
     input_layer_rnn = Input(shape=(None, cnn_model.output_shape[1]))
 
-    rnn_layer = Bidirectional(LSTM(units=256, return_sequences=True))(input_layer_rnn)
-    rnn_layer = Bidirectional(LSTM(units=128, return_sequences=True))(rnn_layer)
-    rnn_layer = LSTM(units=64, return_sequences=True)(rnn_layer)
+    rnn_layer = Bidirectional(GRU(units=256, return_sequences=True))(input_layer_rnn)  # Remplacement de LSTM par GRU
+    rnn_layer = SpatialDropout1D(0.3)(rnn_layer)  # Ajout de dropout spatial pour la régularisation
+    rnn_layer = Bidirectional(GRU(units=128, return_sequences=True))(rnn_layer)
+    rnn_layer = SpatialDropout1D(0.3)(rnn_layer)  # Ajout de dropout spatial pour la régularisation
+    rnn_layer = GRU(units=64, return_sequences=True)(rnn_layer)
 
-    concatenated_outputs = concatenate([rnn_layer, rnn_layer])
+    max_pool = GlobalMaxPooling1D()(rnn_layer)
+    avg_pool = GlobalAveragePooling1D()(rnn_layer)
+
+    pooled_features = concatenate([max_pool, avg_pool])
+
+    dense_layer = Dense(units=64, activation='relu')(pooled_features)
+    dense_layer = Dropout(0.3)(dense_layer)
+
+    concatenated_outputs = concatenate([pooled_features, dense_layer])
+
     return concatenated_outputs
 
 def build_combined_model(cnn_model, rnn_output_shape):
@@ -115,6 +144,10 @@ def build_combined_model(cnn_model, rnn_output_shape):
 
     combined_features = Dense(units=32, activation='relu')(input_layer_rnn)
     combined_features = Dense(units=32, activation='relu')(combined_features)
+
+    # Ajout de couches supplémentaires
+    combined_features = Dense(units=64, activation='relu')(combined_features)
+    combined_features = Dropout(0.3)(combined_features)
 
     output_layer = Dense(units=128, activation='relu')(combined_features)
     output_layer = Dropout(0.2)(output_layer)
@@ -125,6 +158,7 @@ def build_combined_model(cnn_model, rnn_output_shape):
 
     return combined_model
 
+
 def train_model(model, x_train, rnn_x_train, y_train, x_val, rnn_x_val, y_val, epochs, callbacks):
     history = model.fit([x_train, rnn_x_train], y_train, epochs=epochs, validation_data=([x_val, rnn_x_val], y_val), callbacks=callbacks)
     return history
@@ -134,40 +168,16 @@ def train_model(model, x_train, rnn_x_train, y_train, x_val, rnn_x_val, y_val, e
 labels = ['PNEUMONIA', 'NORMAL']
 img_size = 150
 
-train_df = get_data('./../../radio_pictures/chest_xray/train', labels, img_size)
-test_df = get_data('./../../radio_pictures/chest_xray/test', labels, img_size)
-val_df = get_data('./../../radio_pictures/chest_xray/val', labels, img_size)
-
-# Exploratrion des données.
+train_df = get_data('./radio_pictures/chest_xray/train', labels, img_size)
+test_df = get_data('./radio_pictures/chest_xray/test', labels, img_size)
+val_df = get_data('./radio_pictures/chest_xray/val', labels, img_size)
 
 
-# Compter les occurrences de chaque étiquette
-label_counts = train_df['label'].value_counts()
 
-# Tracer le countplot avec des couleurs différentes
-sns.set_style('darkgrid')
-plt.figure(figsize=(8, 6))
-sns.countplot(x='label', data=train_df, palette=['blue', 'green'])
-plt.title('Nombre d\'images pneumonia (pneumonie) et normal dans l\'ensemble de données d\'entraînement')
-plt.xlabel('Étiquette')
-plt.ylabel('Nombre d\'images')
-plt.xticks(ticks=[0, 1], labels=['Pneumonia', 'Normal'])
-plt.show()
-
-# Affichage d'une image de Pneumonia
-plt.figure(figsize=(5, 5))
-plt.imshow(train_df[train_df['label'] == 0]['image'].iloc[0], cmap='gray')
-plt.title('Pneumonia')
-
-# Affichage d'une image de Normal
-plt.figure(figsize=(5, 5))
-plt.imshow(train_df[train_df['label'] == 1]['image'].iloc[0], cmap='gray')
-plt.title('Normal')
-
-plt.show()
-
-
-x_train, y_train, x_val, y_val, x_test, y_test = preprocess_data(train_df, test_df, val_df, img_size)
+# Utilisation de la fonction preprocess_data pour les ensembles d'entraînement, de validation et de test
+x_train, y_train = preprocess_data(train_df, img_size)
+x_val, y_val = preprocess_data(val_df, img_size)
+x_test, y_test = preprocess_data(test_df, img_size)
 
 # Utilisation de la fonction pour créer le générateur de données
 datagen = create_datagen(rotation_range=30, zoom_range=0.2, width_shift_range=0.1, height_shift_range=0.1, horizontal_flip=True, vertical_flip=False)
@@ -199,14 +209,6 @@ rnn_x_val = np.expand_dims(cnn_val_features, axis=1)
 # Train the combined model
 history = train_model(combined_model, x_train, rnn_x_train, y_train_reshaped, x_val, rnn_x_val, y_val_reshaped, epochs=12, callbacks=[learning_rate_reduction])
 
-# Imprimer la perte et l'accuracy à chaque epoch
-for epoch in range(1, 13):
-    train_loss = history.history['loss'][epoch - 1]
-    train_accuracy = history.history['accuracy'][epoch - 1]
-    val_loss = history.history['val_loss'][epoch - 1]
-    val_accuracy = history.history['val_accuracy'][epoch - 1]
-    print(f"Epoch {epoch}/12 - Loss: {train_loss:.4f} - Accuracy: {train_accuracy:.4f} - Val Loss: {val_loss:.4f} - Val Accuracy: {val_accuracy:.4f}")
-
 # Evaluation du modèle
 
 y_test_reshaped = y_test.reshape(-1, 1)
@@ -232,7 +234,7 @@ predictions = combined_model.predict([x_test, rnn_x_test])
 
 # Round the predictions to get binary values (0 or 1)
 predictions = np.round(predictions)
- 
+
 # Convertir les prédictions en valeurs binaires
 predictions_binary = [1 if pred > 0.5 else 0 for pred in predictions]
 
@@ -243,10 +245,24 @@ print(classification_report(y_test, predictions_binary, target_names=['Pneumonia
 
 # Calculer la matrice de confusion
 cm1 = confusion_matrix(y_test_reshaped, predictions_binary)
-
+print(cm1)
 # Créer un DataFrame pour la matrice de confusion
 cm1_df = pd.DataFrame(cm1, index=['0', '1'], columns=['0', '1'])
 
+def extract_performance_metrics(self):
+        # Logic to extract performance metrics
+        # This could involve accessing attributes of the model, evaluating metrics, etc.
+        history = self.history
+        loss = self.loss
+        accuracy = self.accuracy
+        classification_rep = self.classification_rep
+        cm1 = self.cm1
+        label_counts = self.label_counts
+        sample_images = self.sample_images
+
+        return history, loss, accuracy, classification_rep, cm1, label_counts, sample_images
+
+        
 # Tracer la heatmap de la matrice de confusion
 plt.figure(figsize=(8, 8))
 sns.heatmap(cm1_df, cmap="Blues", linecolor='black', linewidth=1, annot=True, fmt='', xticklabels=labels, yticklabels=labels)
