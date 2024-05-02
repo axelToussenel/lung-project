@@ -12,6 +12,7 @@ import cv2
 import os
 
 
+#récupération des données
 def get_data(data_dir, labels, img_size):
     data = []
     for label in labels:

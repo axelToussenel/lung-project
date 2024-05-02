@@ -12,7 +12,7 @@ import cv2
 import os
 
 # Importer les fonctions du modèle combiné
-from process.RNN import get_data, build_combined_model, preprocess_data, create_datagen, build_cnn_model, build_rnn_model, train_model
+from RNN import get_data, build_combined_model, preprocess_data, create_datagen, build_cnn_model, build_rnn_model, train_model
 
 # Initialisation de l'application Dash
 app = dash.Dash(__name__)
@@ -31,9 +31,9 @@ def init_dashboard(n_clicks):
         raise dash.exceptions.PreventUpdate
     else:
         labels = ['PNEUMONIA', 'NORMAL']
-        train_df = get_data('..\\radio_picture\\chest_xray\\train', labels, 150)
-        test_df = get_data('..\\radio_picture\\chest_xray\\test', labels, 150)
-        val_df = get_data('..\\radio_picture\\chest_xray\\val', labels, 150)
+        train_df = get_data('.\\..\\radio_pictures\\chest_xray\\train', labels, 150)
+        test_df = get_data('.\\..\\radio_pictures\\chest_xray\\test', labels, 150)
+        val_df = get_data('.\\..\\radio_pictures\\chest_xray\\val', labels, 150)
 
         x_train, y_train, x_val, y_val, x_test, y_test = preprocess_data(train_df, test_df, val_df, 150)
 
@@ -143,15 +143,6 @@ def update_output(list_of_contents, list_of_names, list_of_dates):
             zip(list_of_contents, list_of_names, list_of_dates)]
         return children
 
-
-    def check_path(path):
-        absolute_path = os.path.abspath(path)
-        if os.path.exists(absolute_path):
-            print(f"Le chemin {absolute_path} existe.")
-        else:
-            print(f"Le chemin {absolute_path} n'existe pas.")
-    path_test = os.path.join('..\\radio_picture\\chest_xray\\train', 'PNEUMONIA')
-    check_path(path_test)
 
 # Définir les styles CSS
 styles = {
