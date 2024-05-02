@@ -79,8 +79,8 @@ def init_dashboard(n_clicks):
                         fill_color='paleturquoise',
                         align='left'),
             cells=dict(values=[['Précision', 'Rappel', 'F-mesure'],
-                            [0.85, 0.78, 0.81],  # Performances d'entraînement
-                            [0.82, 0.75, 0.78]],  # Performances de test
+                        [0.85, 0.78, 0.81],  # Performances d'entraînement
+                        [0.82, 0.75, 0.78]],  # Performances de test
                     fill_color='lavender',
                     align='left'))
         ])

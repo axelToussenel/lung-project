@@ -1,27 +1,26 @@
-import numpy as np
+import numpy as np 
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-import torch
-import torchvision
-from torchvision import transforms
-from torch.utils.data import Dataset, DataLoader
-import os
+import keras
+from keras.models import Model, Sequential
+from keras.layers import Activation, Add, Input, Conv2D, MaxPool2D, Flatten, Dense, Dropout, BatchNormalization, LSTM, concatenate, Bidirectional, SpatialDropout1D, GlobalMaxPooling1D, GlobalAveragePooling1D
+from keras.callbacks import ReduceLROnPlateau
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from sklearn.metrics import classification_report , confusion_matrix
 import cv2
-from sklearn.metrics import confusion_matrix
+import os
 
-img_size = 150
-sequence_length = 1  # Longueur de la séquence pour chaque entrée dans le RNN
 
-def get_training_data(data_dir, labels):
+def get_data(data_dir, labels, img_size):
     data = []
     for label in labels:
         path = os.path.join(data_dir, label)
         class_num = labels.index(label)
         for img in os.listdir(path):
             try:
-                img_arr = cv2.imread(os.path.join(path, img), cv2.IMREAD_GRAYSCALE)  # Charger l'image en niveaux de gris
-                resized_arr = cv2.resize(img_arr, (img_size, img_size)) # Redimensionner les images à la taille préférée
+                img_arr = cv2.imread(os.path.join(path, img), cv2.IMREAD_GRAYSCALE)
+                resized_arr = cv2.resize(img_arr, (img_size, img_size)) # Redimensionner les images à la taille spécifiée
                 data.append([resized_arr, class_num])
             except Exception as e:
                 print(e)
@@ -29,119 +28,140 @@ def get_training_data(data_dir, labels):
     df = pd.DataFrame(data, columns=['image', 'label'])
     return df
 
-# Exemple d'utilisation:
-labels = ['PNEUMONIA', 'NORMAL']
-train_df = get_training_data(r'C:/Users/yonim/OneDrive - Ynov/Deep learning/chest_xray/train', labels)
-test_df = get_training_data(r'C:\Users/yonim/OneDrive - Ynov/Deep learning/chest_xray/test', labels)
-val_df = get_training_data(r'C:/Users/yonim/OneDrive - Ynov/Deep learning/chest_xray/val', labels)
 
-# Définir les transformations pour le prétraitement des données
-transform = transforms.Compose([
-    transforms.ToTensor(),  # Convertir l'image en tenseur
-    transforms.Resize((img_size, img_size)),  # Redimensionner l'image
-])
+def load_and_resize_images(df, img_size, channels=1):
+    x = []
+    y = []
 
-class CustomDataset(Dataset):
-    def __init__(self, dataframe, transform=None):
-        self.dataframe = dataframe
-        self.transform = transform
+    for _, row in df.iterrows():
+        img = cv2.resize(row['image'], (img_size, img_size))
+        if channels == 1:
+            img = np.expand_dims(img, axis=-1)  # Ajouter une dimension pour les canaux
+        x.append(img)
+        y.append(row['label'])
 
-    def __len__(self):
-        return len(self.dataframe)
+    return np.array(x), np.array(y)
 
-    def __getitem__(self, idx):
-        img = self.dataframe.iloc[idx]['image']
-        label = self.dataframe.iloc[idx]['label']
-        if self.transform:
-            img = self.transform(img)
-        return img, label
 
-# Créer les ensembles de données d'entraînement, de validation et de test
-train_dataset = CustomDataset(train_df, transform=transform)
-val_dataset = CustomDataset(val_df, transform=transform)
-test_dataset = CustomDataset(test_df, transform=transform)
+def preprocess_data(train_df, test_df, val_df, img_size):
+    # Charger et redimensionner les images
+    x_train, y_train = load_and_resize_images(train_df, img_size)
+    x_val, y_val = load_and_resize_images(val_df, img_size)
+    x_test, y_test = load_and_resize_images(test_df, img_size)
 
-train_loader = DataLoader(train_dataset, batch_size=20, shuffle=True)
-val_loader = DataLoader(val_dataset, batch_size=20)
-test_loader = DataLoader(test_dataset, batch_size=20)
+    # Normaliser les données
+    x_train = x_train / 255.0
+    x_val = x_val / 255.0
+    x_test = x_test / 255.0
 
-class RNNModel(torch.nn.Module):
-    def __init__(self, input_size, hidden_size, num_layers, num_classes):
-        super(RNNModel, self).__init__()
-        self.hidden_size = hidden_size
-        self.num_layers = num_layers
-        self.rnn = torch.nn.RNN(input_size, hidden_size, num_layers, batch_first=True)
-        self.fc = torch.nn.Linear(hidden_size, num_classes)
+    return x_train, y_train, x_val, y_val, x_test, y_test
 
-    def forward(self, x):
-        # Initialiser l'état caché initial à zéro
-        batch_size = x.size(0)
-        h0 = torch.zeros(self.num_layers, batch_size, self.hidden_size).to(x.device)
-        # Passer les données à travers le RNN
-        out, _ = self.rnn(x, h0)
-        # Obtenir la sortie de la dernière étape temporelle
-        out = self.fc(out[:, -1, :])
-        return out
 
-# Initialiser le modèle en utilisant la taille des images définie précédemment
-model = RNNModel(img_size, 128, 2, 1)  # Utilisation de 128 unités cachées et 2 couches dans le RNN
+def create_datagen(rotation_range=30, zoom_range=0.2, width_shift_range=0.1, height_shift_range=0.1, horizontal_flip=True, vertical_flip=False):
+    datagen = ImageDataGenerator(
+        featurewise_center=False,
+        samplewise_center=False,
+        featurewise_std_normalization=False,
+        samplewise_std_normalization=False,
+        zca_whitening=False,
+        rotation_range=rotation_range,
+        zoom_range=zoom_range,
+        width_shift_range=width_shift_range,
+        height_shift_range=height_shift_range,
+        horizontal_flip=horizontal_flip,
+        vertical_flip=vertical_flip
+    )
+    return datagen
 
-criterion = torch.nn.BCEWithLogitsLoss()  # Utilisation de BCEWithLogitsLoss pour la classification binaire
-optimizer = torch.optim.RMSprop(model.parameters(), lr=0.001)
 
-# Supposons que vos images aient 3 canaux (RGB)
-num_channels = 3
+def build_cnn_model(input_shape=(150, 150, 1)):
+    input_layer_cnn = Input(shape=input_shape)
 
-# Entraînement du modèle
-num_epochs = 12
-for epoch in range(num_epochs):
-    model.train()
-    running_loss = 0.0
-    for inputs, labels in train_loader:
-        # Réorganiser les dimensions des données d'entrée
-        inputs = inputs.view(inputs.size(0), -1)  # Aplatir chaque image individuellement
-        # Remettre à zéro les gradients
-        optimizer.zero_grad()
-        # Transmettre les données au modèle
-        outputs = model(inputs)
-        # Calculer la perte
-        loss = criterion(outputs.squeeze(), labels.float())
-        # Rétropropagation et mise à jour des poids
-        loss.backward()
-        optimizer.step()
-        running_loss += loss.item()
-    epoch_loss = running_loss / len(train_loader)
-    print(f'Epoch [{epoch+1}/{num_epochs}], Loss: {epoch_loss:.4f}')
+    # Première couche de convolution avec 64 filtres de taille 3x3
+    x = Conv2D(64, (3, 3), strides=1, padding='same')(input_layer_cnn)
+    x = BatchNormalization()(x)
+    x = Activation('relu')(x)
+    x = MaxPool2D((2, 2), strides=2, padding='same')(x)
 
-# Évaluation du modèle
-model.eval()
-test_losses = []
-test_accs = []
-with torch.no_grad():
-    for inputs, labels in test_loader:
-        inputs = inputs.view(inputs.size(0), -1)  # Aplatir chaque image individuellement
-        outputs = model(inputs)
-        test_loss = criterion(outputs.squeeze(), labels.float())
-        test_losses.append(test_loss.item())
-        test_acc = ((outputs > 0.5).float() == labels.unsqueeze(1).float()).float().mean()
-        test_accs.append(test_acc.item())
-mean_test_loss = np.mean(test_losses)
-print(f'Test Loss: {mean_test_loss:.4f}, Test Accuracy: {mean_test_acc:.4f}')
+    # Deuxième couche de convolution avec 128 filtres de taille 3x3
+    x = Conv2D(128, (3, 3), strides=1, padding='same')(x)
+    x = BatchNormalization()(x)
+    x = Activation('relu')(x)
+    x = MaxPool2D((2, 2), strides=2, padding='same')(x)
 
-# Génération de la matrice de confusion
-predictions = []
-true_labels = []
-with torch.no_grad():
-    for inputs, labels in test_loader:
-        inputs = inputs.view(-1, img_size * img_size)
-        outputs = model(inputs)
-        predictions.extend((outputs > 0.5).int().tolist())
-        true_labels.extend(labels.int().tolist())
+    # Troisième couche de convolution avec 256 filtres de taille 3x3
+    x = Conv2D(256, (3, 3), strides=1, padding='same')(x)
+    x = BatchNormalization()(x)
+    x = Activation('relu')(x)
+    x = MaxPool2D((2, 2), strides=2, padding='same')(x)
 
-cm = confusion_matrix(true_labels, predictions)
-plt.figure(figsize=(6, 6))
-sns.heatmap(cm, cmap='Blues', linecolor='black', linewidth=1, annot=True, fmt='', xticklabels=['PNEUMONIA', 'NORMAL'], yticklabels=['PNEUMONIA', 'NORMAL'])
-plt.xlabel('Predicted Label')
-plt.ylabel('True Label')
-plt.title('Confusion Matrix')
-plt.show()
+    # Quatrième couche de convolution avec 512 filtres de taille 3x3
+    x = Conv2D(512, (3, 3), strides=1, padding='same')(x)
+    x = BatchNormalization()(x)
+    x = Activation('relu')(x)
+    x = MaxPool2D((2, 2), strides=2, padding='same')(x)
+
+    # Cinquième couche de convolution avec 512 filtres de taille 3x3
+    x = Conv2D(512, (3, 3), strides=1, padding='same')(x)
+    x = BatchNormalization()(x)
+    x = Activation('relu')(x)
+    x = MaxPool2D((2, 2), strides=2, padding='same')(x)
+
+    # Ajout d'un bloc résiduel avec deux couches de convolution de 512 filtres
+    shortcut = x
+    x = Conv2D(512, (3, 3), strides=1, padding='same')(x)
+    x = BatchNormalization()(x)
+    x = Activation('relu')(x)
+    x = Conv2D(512, (3, 3), strides=1, padding='same')(x)
+    x = BatchNormalization()(x)
+    x = Add()([shortcut, x])
+    x = Activation('relu')(x)
+
+    x = Flatten()(x)
+
+    cnn_model = Model(inputs=input_layer_cnn, outputs=x)
+    return cnn_model
+
+def build_rnn_model(input_shape):
+    input_layer_rnn = Input(shape=(None, cnn_model.output_shape[1]))
+
+    rnn_layer = Bidirectional(LSTM(units=256, return_sequences=True))(input_layer_rnn)
+    rnn_layer = SpatialDropout1D(0.3)(rnn_layer)  # Ajout de dropout spatial pour la régularisation
+    rnn_layer = Bidirectional(LSTM(units=128, return_sequences=True))(rnn_layer)
+    rnn_layer = SpatialDropout1D(0.3)(rnn_layer)  # Ajout de dropout spatial pour la régularisation
+    rnn_layer = LSTM(units=64, return_sequences=True)(rnn_layer)
+
+    # Ajout de couches de pooling pour agréger les informations temporelles
+    max_pool = GlobalMaxPooling1D()(rnn_layer)
+    avg_pool = GlobalAveragePooling1D()(rnn_layer)
+
+    # Concaténation des couches de pooling pour former un vecteur de caractéristiques
+    pooled_features = concatenate([max_pool, avg_pool])
+
+    # Ajout d'une couche dense pour extraire des caractéristiques supplémentaires
+    dense_layer = Dense(units=64, activation='relu')(pooled_features)
+    dense_layer = Dropout(0.3)(dense_layer)
+
+    concatenated_outputs = concatenate([pooled_features, dense_layer])
+
+    return concatenated_outputs
+
+def build_combined_model(cnn_model, rnn_output_shape):
+    input_layer_rnn = Input(shape=(None, cnn_model.output_shape[1]))
+
+    combined_features = Dense(units=32, activation='relu')(input_layer_rnn)
+    combined_features = Dense(units=32, activation='relu')(combined_features)
+
+    output_layer = Dense(units=128, activation='relu')(combined_features)
+    output_layer = Dropout(0.2)(output_layer)
+    output_layer = Dense(units=1, activation='sigmoid')(output_layer)
+
+    combined_model = Model(inputs=[cnn_model.input, input_layer_rnn], outputs=output_layer)
+    combined_model.compile(optimizer="rmsprop", loss='binary_crossentropy', metrics=['accuracy'])
+
+    return combined_model
+
+def train_model(model, x_train, rnn_x_train, y_train, x_val, rnn_x_val, y_val, epochs, callbacks):
+    history = model.fit([x_train, rnn_x_train], y_train, epochs=epochs, validation_data=([x_val, rnn_x_val], y_val), callbacks=callbacks)
+    return history
+
